@@ -1,0 +1,47 @@
+# Build outputs
+**/bin/
+**/obj/
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# Rider/IDE files
+.idea/
+*.sln.iml
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.vcxproj.user
+
+# NuGet
+packages/
+*.nupkg
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+
+# Temporary
+*.tmp
+
+# Ignore generated coverage files
+coverage*/
+
+# Ignore published artifacts
+**/publish/
+
+# keep README.md tracked
+README.md

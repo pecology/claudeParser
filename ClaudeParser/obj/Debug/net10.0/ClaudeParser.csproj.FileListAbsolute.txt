@@ -1,0 +1,11 @@
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\ClaudeParser.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\ClaudeParser.AssemblyInfoInputs.cache
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\ClaudeParser.AssemblyInfo.cs
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\ClaudeParser.csproj.CoreCompileInputs.cache
+C:\Users\kobay\program\claudeParser\ClaudeParser\bin\Debug\net10.0\ClaudeParser.deps.json
+C:\Users\kobay\program\claudeParser\ClaudeParser\bin\Debug\net10.0\ClaudeParser.dll
+C:\Users\kobay\program\claudeParser\ClaudeParser\bin\Debug\net10.0\ClaudeParser.pdb
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\ClaudeParser.dll
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\refint\ClaudeParser.dll
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\ClaudeParser.pdb
+C:\Users\kobay\program\claudeParser\ClaudeParser\obj\Debug\net10.0\ref\ClaudeParser.dll

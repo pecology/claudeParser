@@ -82,7 +82,7 @@ public class Parser<T, TToken>
             else if (result is FailureResult<T, TToken> failure)
             {
                 context.Trace.Exit(_name, startPos, failure.Remaining.Position, false,
-                    error: failure.Error.Messages.FirstOrDefault()?.Text, elapsed: elapsed);
+                    error: failure.ErrorValue.Messages.FirstOrDefault()?.Text, elapsed: elapsed);
             }
             
             return result;
@@ -107,9 +107,9 @@ public class Parser<T, TToken>
             if (result is FailureResult<T, TToken> failure)
             {
                 var newError = new ParseError(
-                    failure.Error.Position,
+                    failure.ErrorValue.Position,
                     ErrorMessage.Expected(expected),
-                    failure.Error.ContextStack);
+                    failure.ErrorValue.ContextStack);
                 return ParseResult<T, TToken>.Failure(newError, failure.Remaining);
             }
             return result;
@@ -125,7 +125,7 @@ public class Parser<T, TToken>
             if (result is FailureResult<T, TToken> failure)
             {
                 return ParseResult<T, TToken>.Failure(
-                    failure.Error.WithContext(context),
+                    failure.ErrorValue.WithContext(context),
                     failure.Remaining);
             }
             return result;
@@ -169,8 +169,8 @@ public class Parser<T, TToken>
                 var failure = (FailureResult<TNext, TToken>)result2;
                 // エラーをマージ（バックトラック情報の保持）
                 var mergedError = success1.Error != null 
-                    ? success1.Error.Merge(failure.Error) 
-                    : failure.Error;
+                    ? success1.Error.Merge(failure.ErrorValue) 
+                    : failure.ErrorValue;
                 return ParseResult<TResult, TToken>.Failure(mergedError, failure.Remaining);
             }
 

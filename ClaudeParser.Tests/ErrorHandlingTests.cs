@@ -17,10 +17,10 @@ public class ErrorHandlingTests
         
         Assert.False(result.IsSuccess);
         var failure = (FailureResult<string, char>)result;
-        Assert.NotNull(failure.Error);
-        Assert.Equal(1, failure.Error.Position.Line);
+        Assert.NotNull(failure.ErrorValue);
+        Assert.Equal(1, failure.ErrorValue.Position.Line);
         // "help"に対して"hello"を試すと、'l'(4文字目)の位置で失敗する
-        Assert.Equal(4, failure.Error.Position.Column);
+        Assert.Equal(4, failure.ErrorValue.Position.Column);
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class ErrorHandlingTests
         Assert.False(result.IsSuccess);
         var failure = (FailureResult<string, char>)result;
         // 両方のエラーがマージされている
-        Assert.True(failure.Error.Messages.Count >= 2);
+        Assert.True(failure.ErrorValue.Messages.Count >= 2);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class ErrorHandlingTests
         
         Assert.False(result.IsSuccess);
         var failure = (FailureResult<char, char>)result;
-        Assert.Contains(failure.Error.Messages, m => m.Text == "整数の開始");
+        Assert.Contains(failure.ErrorValue.Messages, m => m.Text == "整数の開始");
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class ErrorHandlingTests
         
         Assert.False(result.IsSuccess);
         var failure = (FailureResult<char, char>)result;
-        Assert.Contains("数値のパース", failure.Error.ContextStack);
+        Assert.Contains("数値のパース", failure.ErrorValue.ContextStack);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class ErrorHandlingTests
         var result = parser.Parse(input);
         
         var failure = (FailureResult<char, char>)result;
-        var errorString = failure.Error.ToString();
+        var errorString = failure.ErrorValue.ToString();
         
         Assert.Contains("パースエラー", errorString);
         Assert.Contains("数字", errorString);
@@ -85,7 +85,7 @@ public class ErrorHandlingTests
         var result = parser.Parse(advanced);
         
         var failure = (FailureResult<char, char>)result;
-        var detailed = failure.Error.ToDetailedString("hello\nworld");
+        var detailed = failure.ErrorValue.ToDetailedString("hello\nworld");
         
         Assert.Contains("2", detailed); // 行番号
     }
@@ -180,6 +180,6 @@ public class ErrorHandlingTests
         // 無限ループを検出してエラーを返すべき
         Assert.False(result.IsSuccess);
         var failure = (FailureResult<IReadOnlyList<string>, char>)result;
-        Assert.Contains(failure.Error.Messages, m => m.Text.Contains("入力を消費せず"));
+        Assert.Contains(failure.ErrorValue.Messages, m => m.Text.Contains("入力を消費せず"));
     }
 }

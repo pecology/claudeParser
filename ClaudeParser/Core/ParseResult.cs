@@ -138,13 +138,24 @@ public sealed class SuccessResult<T, TToken> : ParseResult<T, TToken>
 /// </summary>
 public sealed class FailureResult<T, TToken> : ParseResult<T, TToken>
 {
-    public override ParseError? Error { get; }
+    private readonly ParseError _error;
+    
+    /// <summary>
+    /// エラー情報。FailureResultでは常に存在します。
+    /// </summary>
+    public override ParseError? Error => _error;
+    
+    /// <summary>
+    /// エラー情報（non-nullableアクセス）。
+    /// </summary>
+    public ParseError ErrorValue => _error;
+    
     public override IInputStream<TToken> Remaining { get; }
     public override bool IsSuccess => false;
 
     public FailureResult(ParseError error, IInputStream<TToken> remaining)
     {
-        Error = error;
+        _error = error ?? throw new ArgumentNullException(nameof(error));
         Remaining = remaining;
     }
 
@@ -152,7 +163,7 @@ public sealed class FailureResult<T, TToken> : ParseResult<T, TToken>
     /// 型を変換します（失敗なので値は変わらない）。
     /// </summary>
     public ParseResult<TNew, TToken> Cast<TNew>() =>
-        ParseResult<TNew, TToken>.Failure(Error!, Remaining);
+        ParseResult<TNew, TToken>.Failure(_error, Remaining);
 }
 
 /// <summary>
@@ -168,7 +179,7 @@ public static class ParseResultExtensions
         return result switch
         {
             SuccessResult<T, TToken> s => s.Value,
-            FailureResult<T, TToken> f => throw new ParseException(f.Error, source),
+            FailureResult<T, TToken> f => throw new ParseException(f.ErrorValue, source),
             _ => throw new InvalidOperationException()
         };
     }
@@ -196,7 +207,7 @@ public static class ParseResultExtensions
         return result switch
         {
             SuccessResult<T, TToken> s => onSuccess(s.Value, s.Remaining),
-            FailureResult<T, TToken> f => onFailure(f.Error, f.Remaining),
+            FailureResult<T, TToken> f => onFailure(f.ErrorValue, f.Remaining),
             _ => throw new InvalidOperationException()
         };
     }

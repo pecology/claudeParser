@@ -43,5 +43,4 @@ coverage*/
 # Ignore published artifacts
 **/publish/
 
-# keep README.md tracked
-README.md
+# (Do not ignore README.md) - keep it tracked

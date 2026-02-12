@@ -5,7 +5,7 @@ LINQ/クエリ式構文をサポートし、文字列・バイト列・任意の
 
 ## 🌐 ウェブデモ
 
-[GitHub Pagesでデモを試す](https://your-username.github.io/claudeParser/)
+[GitHub Pagesでデモを試す](https://pecology.github.io/claudeParser/)
 
 各種パーサー（電卓、CSV、JSON、正規表現）をブラウザ上で試せます。
 

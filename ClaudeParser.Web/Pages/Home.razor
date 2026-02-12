@@ -1,0 +1,54 @@
+﻿@page "/"
+
+<PageTitle>ClaudeParser Playground</PageTitle>
+
+<h1>ClaudeParser Playground</h1>
+
+<p class="lead">関数型パーサーコンビネーターライブラリ「ClaudeParser」のインタラクティブなデモンストレーションです。</p>
+
+<div class="row mt-4">
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">🧮 Calculator</h5>
+                <p class="card-text">四則演算・累乗・括弧をサポートする式の計算。演算子の優先順位と結合規則を正しく処理します。</p>
+                <a href="calculator" class="btn btn-primary">Try Calculator</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">📊 CSV Parser</h5>
+                <p class="card-text">RFC 4180準拠のCSVパーサー。クォート・エスケープ・改行を含むフィールドに対応。</p>
+                <a href="csv" class="btn btn-primary">Try CSV Parser</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">📝 JSON Parser</h5>
+                <p class="card-text">RFC 8259準拠のJSONパーサー。ネストしたオブジェクト・配列・エスケープシーケンスに対応。</p>
+                <a href="json" class="btn btn-primary">Try JSON Parser</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">🔍 Regex Parser</h5>
+                <p class="card-text">正規表現パターンをパースしてASTを視覚化。文字列マッチング機能付き。</p>
+                <a href="regex" class="btn btn-primary">Try Regex Parser</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h2 class="mt-4">Features</h2>
+<ul>
+    <li><strong>関数型デザイン</strong>: イミュータブルで合成可能なパーサーコンビネーター</li>
+    <li><strong>LINQ サポート</strong>: クエリ式でパーサーを直感的に組み立て</li>
+    <li><strong>詳細なエラー</strong>: 位置情報とコンテキスト付きのエラーメッセージ</li>
+    <li><strong>トレース機能</strong>: パース過程を可視化してデバッグ</li>
+</ul>

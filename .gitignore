@@ -43,4 +43,7 @@ coverage*/
 # Ignore published artifacts
 **/publish/
 
+# Blazor WebAssembly framework files (generated during build/publish)
+**/wwwroot/_framework/
+
 # (Do not ignore README.md) - keep it tracked

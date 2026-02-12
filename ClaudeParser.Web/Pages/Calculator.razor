@@ -1,0 +1,133 @@
+@page "/calculator"
+@using ClaudeParser.Examples
+@using ClaudeParser.Core
+
+<PageTitle>Calculator - ClaudeParser</PageTitle>
+
+<h1>🧮 Calculator Parser</h1>
+
+<p>四則演算式を入力してください。演算子の優先順位と結合規則を正しく処理します。</p>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="mb-3">
+            <label for="expression" class="form-label">式</label>
+            <input type="text" class="form-control form-control-lg" id="expression" 
+                   @bind="expression" @bind:event="oninput" @bind:after="Calculate"
+                   placeholder="例: (1 + 2) * 3 - 4 / 2" />
+        </div>
+        <button class="btn btn-secondary" @onclick="Clear">クリア</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(result))
+{
+    <div class="mt-4">
+        <div class="alert @(hasError ? "alert-danger" : "alert-success")" role="alert">
+            @if (hasError)
+            {
+                <h5>エラー</h5>
+                <pre style="white-space: pre-wrap; margin: 0;">@result</pre>
+            }
+            else
+            {
+                <h5>結果</h5>
+                <span class="fs-3">@result</span>
+            }
+        </div>
+    </div>
+}
+
+<div class="mt-4">
+    <h3>サポートする演算子</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>演算子</th>
+                <th>説明</th>
+                <th>優先度</th>
+                <th>結合規則</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><code>+</code></td><td>加算</td><td>低</td><td>左結合</td></tr>
+            <tr><td><code>-</code></td><td>減算</td><td>低</td><td>左結合</td></tr>
+            <tr><td><code>*</code></td><td>乗算</td><td>中</td><td>左結合</td></tr>
+            <tr><td><code>/</code></td><td>除算</td><td>中</td><td>左結合</td></tr>
+            <tr><td><code>%</code></td><td>剰余</td><td>中</td><td>左結合</td></tr>
+            <tr><td><code>^</code></td><td>累乗</td><td>高</td><td>右結合</td></tr>
+            <tr><td><code>-x</code></td><td>単項マイナス</td><td>最高</td><td>前置</td></tr>
+            <tr><td><code>+x</code></td><td>単項プラス</td><td>最高</td><td>前置</td></tr>
+            <tr><td><code>( )</code></td><td>括弧</td><td>-</td><td>-</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-4">
+    <h3>サンプル式</h3>
+    <div class="d-flex flex-wrap gap-2">
+        @foreach (var sample in samples)
+        {
+            <button class="btn btn-outline-primary btn-sm" @onclick="() => SetSample(sample)">@sample</button>
+        }
+    </div>
+</div>
+
+@code {
+    private string expression = "";
+    private string result = "";
+    private bool hasError = false;
+
+    private readonly string[] samples = new[]
+    {
+        "1 + 2 * 3",
+        "(1 + 2) * 3",
+        "2 ^ 3 ^ 2",
+        "10 - 5 - 2",
+        "-5 * 3",
+        "3.14 * 2",
+        "10 % 3",
+        "2 ^ 10",
+        "(1 + 2) * (3 + 4)"
+    };
+
+    private void Calculate()
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            hasError = false;
+            result = "";  // 空の場合はエラー表示しない
+            return;
+        }
+
+        try
+        {
+            var value = CalculatorParser.Evaluate(expression);
+            hasError = false;
+            result = value.ToString("G");
+        }
+        catch (ParseException ex)
+        {
+            hasError = true;
+            result = ex.Error.ToDetailedString(expression);
+        }
+        catch (Exception ex)
+        {
+            hasError = true;
+            result = ex.Message;
+        }
+    }
+
+    private void Clear()
+    {
+        expression = "";
+        result = "";
+        hasError = false;
+    }
+
+    private void SetSample(string sample)
+    {
+        expression = sample;
+        Calculate();
+    }
+}

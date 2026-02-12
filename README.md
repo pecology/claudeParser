@@ -3,6 +3,12 @@
 HaskellのParsecに触発されたC#向けパーサーコンビネーターライブラリです。
 LINQ/クエリ式構文をサポートし、文字列・バイト列・任意のストリームに対応しています。
 
+## 🌐 ウェブデモ
+
+[GitHub Pagesでデモを試す](https://your-username.github.io/claudeParser/)
+
+各種パーサー（電卓、CSV、JSON、正規表現）をブラウザ上で試せます。
+
 ## 目次
 
 1. [概要](#1-概要)
@@ -15,6 +21,7 @@ LINQ/クエリ式構文をサポートし、文字列・バイト列・任意の
 8. [サンプルパーサー](#8-サンプルパーサー)
 9. [陥りやすい罠と対処法](#9-陥りやすい罠と対処法)
 10. [APIリファレンス](#10-apiリファレンス)
+11. [GitHub Pagesへのデプロイ](#11-github-pagesへのデプロイ)
 
 ---
 
@@ -837,6 +844,46 @@ var result = parser.Parse(new StringInputStream("123abc"));
 | `result.IsSuccess` | 成功かどうか |
 | `result.GetValueOrThrow()` | 値を取得、失敗時は例外 |
 | `result.Match(onSuccess, onFailure)` | パターンマッチング |
+
+---
+
+## 11. GitHub Pagesへのデプロイ
+
+### 自動デプロイ（GitHub Actions）
+
+このリポジトリには、mainブランチへのpush時に自動でGitHub Pagesにデプロイするワークフローが含まれています。
+
+#### セットアップ手順
+
+1. **GitHub Pagesを有効化**:
+   - リポジトリの Settings → Pages
+   - Source を "GitHub Actions" に設定
+
+2. **mainブランチにpush**:
+   - ワークフローが自動実行され、デプロイされます
+
+#### ローカルで実行
+
+```bash
+cd ClaudeParser.Web
+dotnet run
+```
+
+ブラウザで `https://localhost:5001` または表示されるURLにアクセスしてください。
+
+### フレームワークファイルについて
+
+Blazor WebAssemblyのフレームワークファイル（`_framework/`フォルダ）は`dotnet publish`時に自動生成されます。
+ソースコードには含まれず、GitHub Actionsでビルド時に生成されるため、gitにコミットする必要はありません。
+
+### ワークフローの内容
+
+`.github/workflows/deploy.yml`:
+- .NET 10のセットアップ
+- テスト実行
+- Blazor WASMのpublish
+- base-tagの書き換え（リポジトリ名に合わせる）
+- GitHub Pagesへのデプロイ
 
 ---
 

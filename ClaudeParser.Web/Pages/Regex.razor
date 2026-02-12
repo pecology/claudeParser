@@ -1,0 +1,553 @@
+@page "/regex"
+@using ClaudeParser.Examples
+@using ClaudeParser.Core
+
+<PageTitle>Regex Parser - ClaudeParser</PageTitle>
+
+<h1>🔍 Regex Parser</h1>
+
+<p>正規表現パターンをパースしてAST（抽象構文木）を視覚化します。文字列マッチングも実行できます。</p>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="pattern" class="form-label">正規表現パターン</label>
+            <input type="text" class="form-control font-monospace" id="pattern" 
+                   @bind="pattern" @bind:event="oninput" @bind:after="AutoParse"
+                   placeholder="@patternPlaceholder" />
+        </div>
+        <div class="mb-3">
+            <label for="testInput" class="form-label">テスト文字列</label>
+            <input type="text" class="form-control" id="testInput" 
+                   @bind="testInput" @bind:event="oninput" @bind:after="AutoMatchIfParsed"
+                   placeholder="マッチをテストする文字列" />
+        </div>
+        <div class="mb-2">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" @bind="findAllMode" id="findAllMode">
+                <label class="form-check-label" for="findAllMode">すべてのマッチを検索</label>
+            </div>
+        </div>
+        <button class="btn btn-secondary" @onclick="Clear">クリア</button>
+    </div>
+    <div class="col-md-6">
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                <h5>パースエラー</h5>
+                <pre style="white-space: pre-wrap; margin: 0; font-size: 0.85em;">@errorMessage</pre>
+            </div>
+        }
+        @if (matchResult != null)
+        {
+            <div class="alert @(matchResult.IsMatch ? "alert-success" : "alert-warning")" role="alert">
+                <h5>マッチ結果</h5>
+                @if (matchResult.IsMatch)
+                {
+                    <p>✅ マッチしました: <code>@matchResult.MatchedText</code></p>
+                    @if (!matchResult.IsFullMatch)
+                    {
+                        <small class="text-muted">（部分マッチ：文字列全体ではありません）</small>
+                    }
+                }
+                else
+                {
+                    <p>❌ マッチしませんでした</p>
+                }
+            </div>
+        }
+        @if (allMatches != null && allMatches.Count > 0)
+        {
+            <div class="alert alert-info" role="alert">
+                <h5>すべてのマッチ (@allMatches.Count 件)</h5>
+                <ul class="mb-0">
+                    @foreach (var (pos, text) in allMatches)
+                    {
+                        <li>位置 @pos: <code>@text</code></li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+</div>
+
+@if (ast != null)
+{
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <h3>AST ツリービュー</h3>
+            <div class="border rounded p-3 bg-light" style="max-height: 400px; overflow: auto;">
+                @RenderAstNode(ast)
+            </div>
+        </div>
+        <div class="col-md-6">
+            <h3>AST 図（Mermaid風）</h3>
+            <div class="border rounded p-3" style="max-height: 400px; overflow: auto; background-color: #f8f9fa;">
+                <svg id="regexDiagram" width="100%" height="@(diagramHeight)px">
+                    @RenderDiagram()
+                </svg>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="mt-4">
+    <h3>サンプルパターン</h3>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        @foreach (var (name, pat, test) in samples)
+        {
+            <button class="btn btn-outline-primary btn-sm" @onclick="() => SetSample(pat, test)" title="@pat">@name</button>
+        }
+    </div>
+</div>
+
+<div class="mt-4">
+    <h3>サポートする構文</h3>
+    <div class="row">
+        <div class="col-md-4">
+            <h5>基本</h5>
+            <table class="table table-sm">
+                <tbody>
+                    <tr><td><code>a</code></td><td>リテラル文字</td></tr>
+                    <tr><td><code>.</code></td><td>任意の1文字</td></tr>
+                    <tr><td><code>^</code></td><td>行頭</td></tr>
+                    <tr><td><code>$</code></td><td>行末</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="col-md-4">
+            <h5>量指定子</h5>
+            <table class="table table-sm">
+                <tbody>
+                    <tr><td><code>*</code></td><td>0回以上</td></tr>
+                    <tr><td><code>+</code></td><td>1回以上</td></tr>
+                    <tr><td><code>?</code></td><td>0回または1回</td></tr>
+                    <tr><td><code>{n}</code></td><td>n回</td></tr>
+                    <tr><td><code>{n,m}</code></td><td>n〜m回</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="col-md-4">
+            <h5>文字クラス</h5>
+            <table class="table table-sm">
+                <tbody>
+                    <tr><td><code>[abc]</code></td><td>a, b, c のいずれか</td></tr>
+                    <tr><td><code>[a-z]</code></td><td>a〜zの範囲</td></tr>
+                    <tr><td><code>[^abc]</code></td><td>a, b, c 以外</td></tr>
+                    <tr><td><code>\d</code></td><td>数字</td></tr>
+                    <tr><td><code>\w</code></td><td>単語文字</td></tr>
+                    <tr><td><code>\s</code></td><td>空白</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string pattern = "";
+    private string testInput = "";
+    private string errorMessage = "";
+    private RegexParser.RegexNode? ast;
+    private MatchResult? matchResult;
+    private List<(int, string)>? allMatches;
+    private int diagramHeight = 200;
+    private const string patternPlaceholder = "例: [a-z]+@[a-z]+\\.[a-z]+";
+
+    private class MatchResult
+    {
+        public bool IsMatch { get; set; }
+        public string? MatchedText { get; set; }
+        public bool IsFullMatch { get; set; }
+    }
+
+    private bool findAllMode = false;
+
+    private readonly (string name, string pattern, string test)[] samples = new[]
+    {
+        ("メール", @"[a-z]+@[a-z]+\.[a-z]+", "test@example.com"),
+        ("数字", @"\d+", "abc123def456"),
+        ("単語", @"\w+", "Hello_World123"),
+        ("電話番号", @"\d{2,4}-\d{2,4}-\d{4}", "03-1234-5678"),
+        ("選択", @"cat|dog|bird", "I have a dog"),
+        ("グループ", @"(ab)+", "ababab"),
+        ("否定クラス", @"[^aeiou]+", "xyz"),
+        ("IPアドレス風", @"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", "192.168.1.1"),
+    };
+
+    private void AutoMatchIfParsed()
+    {
+        if (ast != null)
+        {
+            AutoMatch();
+        }
+    }
+
+    private void AutoParse()
+    {
+        errorMessage = "";
+        ast = null;
+        matchResult = null;
+        allMatches = null;
+
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            return;
+        }
+
+        try
+        {
+            ast = RegexParser.ParsePattern(pattern);
+            CalculateDiagramHeight();
+            AutoMatch();
+        }
+        catch (ParseException ex)
+        {
+            errorMessage = ex.Error.ToDetailedString(pattern);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void AutoMatch()
+    {
+        matchResult = null;
+        allMatches = null;
+
+        if (ast == null || string.IsNullOrEmpty(testInput))
+        {
+            return;
+        }
+
+        try
+        {
+            if (findAllMode)
+            {
+                allMatches = RegexParser.FindAll(pattern, testInput).ToList();
+            }
+            else
+            {
+                var matched = RegexParser.Match(pattern, testInput);
+                var isFullMatch = RegexParser.IsMatch(pattern, testInput);
+                
+                matchResult = new MatchResult
+                {
+                    IsMatch = matched != null,
+                    MatchedText = matched,
+                    IsFullMatch = isFullMatch
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    // FindAllMatches is now handled by AutoMatch with findAllMode checkbox
+
+    private void Clear()
+    {
+        pattern = "";
+        testInput = "";
+        errorMessage = "";
+        ast = null;
+        matchResult = null;
+        allMatches = null;
+    }
+
+    private void SetSample(string pat, string test)
+    {
+        pattern = pat;
+        testInput = test;
+        AutoParse();
+    }
+
+    private void CalculateDiagramHeight()
+    {
+        if (ast == null)
+        {
+            diagramHeight = 200;
+            return;
+        }
+        var depth = GetNodeDepth(ast);
+        diagramHeight = Math.Max(200, depth * 80 + 50);
+    }
+
+    private int GetNodeDepth(RegexParser.RegexNode node)
+    {
+        return node switch
+        {
+            RegexParser.SequenceNode s => 1 + (s.Nodes.Count > 0 ? s.Nodes.Max(GetNodeDepth) : 0),
+            RegexParser.AlternationNode a => 1 + (a.Alternatives.Count > 0 ? a.Alternatives.Max(GetNodeDepth) : 0),
+            RegexParser.RepeatNode r => 1 + GetNodeDepth(r.Inner),
+            RegexParser.GroupNode g => 1 + GetNodeDepth(g.Inner),
+            _ => 1
+        };
+    }
+
+    private RenderFragment RenderAstNode(RegexParser.RegexNode node) => builder =>
+    {
+        switch (node)
+        {
+            case RegexParser.LiteralNode lit:
+                RenderNodeBadge(builder, "Literal", "bg-success", $"'{EscapeChar(lit.Char)}'");
+                break;
+
+            case RegexParser.AnyCharNode:
+                RenderNodeBadge(builder, "AnyChar", "bg-info", ".");
+                break;
+
+            case RegexParser.CharClassNode cc:
+                var items = string.Join("", cc.Items);
+                var prefix = cc.Negated ? "[^" : "[";
+                RenderNodeBadge(builder, "CharClass", "bg-warning text-dark", $"{prefix}{items}]");
+                break;
+
+            case RegexParser.SpecialClassNode sc:
+                RenderNodeBadge(builder, "SpecialClass", "bg-primary", $"\\{sc.Type}");
+                break;
+
+            case RegexParser.SequenceNode seq:
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                RenderBadgeInline(builder, "Sequence", "bg-secondary", $"({seq.Nodes.Count} items)");
+                builder.CloseElement();
+                builder.OpenElement(4, "ul");
+                builder.AddAttribute(5, "class", "list-unstyled ms-4");
+                foreach (var child in seq.Nodes)
+                {
+                    builder.OpenElement(6, "li");
+                    builder.AddContent(7, RenderAstNode(child));
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+
+            case RegexParser.AlternationNode alt:
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                RenderBadgeInline(builder, "Alternation", "bg-danger", $"({alt.Alternatives.Count} options)");
+                builder.CloseElement();
+                builder.OpenElement(4, "ul");
+                builder.AddAttribute(5, "class", "list-unstyled ms-4");
+                for (int i = 0; i < alt.Alternatives.Count; i++)
+                {
+                    builder.OpenElement(6, "li");
+                    builder.AddContent(7, $"| ");
+                    builder.AddContent(8, RenderAstNode(alt.Alternatives[i]));
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+
+            case RegexParser.RepeatNode rep:
+                var quantifier = FormatQuantifier(rep.Min, rep.Max);
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                RenderBadgeInline(builder, "Repeat", "bg-info", quantifier);
+                builder.CloseElement();
+                builder.OpenElement(4, "ul");
+                builder.AddAttribute(5, "class", "list-unstyled ms-4");
+                builder.OpenElement(6, "li");
+                builder.AddContent(7, RenderAstNode(rep.Inner));
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+
+            case RegexParser.GroupNode grp:
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                RenderBadgeInline(builder, "Group", "bg-purple", "(...)");
+                builder.CloseElement();
+                builder.OpenElement(4, "ul");
+                builder.AddAttribute(5, "class", "list-unstyled ms-4");
+                builder.OpenElement(6, "li");
+                builder.AddContent(7, RenderAstNode(grp.Inner));
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+
+            case RegexParser.StartAnchorNode:
+                RenderNodeBadge(builder, "Anchor", "bg-dark", "^ (start)");
+                break;
+
+            case RegexParser.EndAnchorNode:
+                RenderNodeBadge(builder, "Anchor", "bg-dark", "$ (end)");
+                break;
+        }
+    };
+
+    private void RenderNodeBadge(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder, string type, string badgeClass, string value)
+    {
+        builder.OpenElement(0, "span");
+        builder.OpenElement(1, "span");
+        builder.AddAttribute(2, "class", $"badge {badgeClass} me-1");
+        builder.AddContent(3, type);
+        builder.CloseElement();
+        builder.AddContent(4, value);
+        builder.CloseElement();
+    }
+
+    private void RenderBadgeInline(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder, string type, string badgeClass, string extra)
+    {
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", $"badge {badgeClass} me-1");
+        builder.AddContent(2, type);
+        builder.CloseElement();
+        builder.AddContent(3, extra);
+    }
+
+    private string FormatQuantifier(int min, int? max)
+    {
+        if (min == 0 && max == null) return "* (0+)";
+        if (min == 1 && max == null) return "+ (1+)";
+        if (min == 0 && max == 1) return "? (0-1)";
+        if (max == null) return $"{{{min},∞}}";
+        if (min == max) return $"{{{min}}}";
+        return $"{{{min},{max}}}";
+    }
+
+    private string EscapeChar(char c) => c switch
+    {
+        '\n' => "\\n",
+        '\r' => "\\r",
+        '\t' => "\\t",
+        _ => c.ToString()
+    };
+
+    // SVG Diagram rendering
+    private int nodeIdCounter = 0;
+    private List<(int id, string label, string type, int x, int y, int? parentId)> diagramNodes = new();
+
+    private RenderFragment RenderDiagram() => builder =>
+    {
+        if (ast == null) return;
+
+        nodeIdCounter = 0;
+        diagramNodes.Clear();
+        
+        BuildDiagramNodes(ast, 0, 0, null, 400);
+
+        // Render connections
+        foreach (var node in diagramNodes.Where(n => n.parentId.HasValue))
+        {
+            var parent = diagramNodes.First(p => p.id == node.parentId);
+            builder.OpenElement(0, "line");
+            builder.AddAttribute(1, "x1", parent.x);
+            builder.AddAttribute(2, "y1", parent.y + 20);
+            builder.AddAttribute(3, "x2", node.x);
+            builder.AddAttribute(4, "y2", node.y - 5);
+            builder.AddAttribute(5, "stroke", "#666");
+            builder.AddAttribute(6, "stroke-width", "1");
+            builder.CloseElement();
+        }
+
+        // Render nodes
+        foreach (var node in diagramNodes)
+        {
+            var color = GetNodeColor(node.type);
+            
+            // Rectangle
+            builder.OpenElement(0, "rect");
+            builder.AddAttribute(1, "x", node.x - 55);
+            builder.AddAttribute(2, "y", node.y - 12);
+            builder.AddAttribute(3, "width", "110");
+            builder.AddAttribute(4, "height", "24");
+            builder.AddAttribute(5, "rx", "4");
+            builder.AddAttribute(6, "fill", color);
+            builder.CloseElement();
+
+            // Text
+            builder.OpenElement(7, "text");
+            builder.AddAttribute(8, "x", node.x);
+            builder.AddAttribute(9, "y", node.y + 4);
+            builder.AddAttribute(10, "text-anchor", "middle");
+            builder.AddAttribute(11, "fill", "white");
+            builder.AddAttribute(12, "font-size", "11");
+            builder.AddContent(13, TruncateLabel(node.label));
+            builder.CloseElement();
+        }
+    };
+
+    private void BuildDiagramNodes(RegexParser.RegexNode node, int depth, int index, int? parentId, int centerX)
+    {
+        var id = nodeIdCounter++;
+        var y = depth * 60 + 30;
+        var label = GetNodeLabel(node);
+        var type = node.GetType().Name;
+
+        diagramNodes.Add((id, label, type, centerX, y, parentId));
+
+        var children = GetChildren(node).ToList();
+        if (children.Count > 0)
+        {
+            var totalWidth = children.Count * 130;
+            var startX = centerX - totalWidth / 2 + 65;
+            
+            for (int i = 0; i < children.Count; i++)
+            {
+                BuildDiagramNodes(children[i], depth + 1, i, id, startX + i * 130);
+            }
+        }
+    }
+
+    private IEnumerable<RegexParser.RegexNode> GetChildren(RegexParser.RegexNode node) => node switch
+    {
+        RegexParser.SequenceNode s => s.Nodes,
+        RegexParser.AlternationNode a => a.Alternatives,
+        RegexParser.RepeatNode r => new[] { r.Inner },
+        RegexParser.GroupNode g => new[] { g.Inner },
+        _ => Enumerable.Empty<RegexParser.RegexNode>()
+    };
+
+    private string GetNodeLabel(RegexParser.RegexNode node) => node switch
+    {
+        RegexParser.LiteralNode lit => $"'{EscapeChar(lit.Char)}'",
+        RegexParser.AnyCharNode => ".",
+        RegexParser.CharClassNode cc => FormatCharClass(cc),
+        RegexParser.SpecialClassNode sc => $"\\{sc.Type}",
+        RegexParser.SequenceNode s => $"Seq({s.Nodes.Count})",
+        RegexParser.AlternationNode a => $"Alt({a.Alternatives.Count})",
+        RegexParser.RepeatNode r => FormatQuantifier(r.Min, r.Max),
+        RegexParser.GroupNode => "Group",
+        RegexParser.StartAnchorNode => "^",
+        RegexParser.EndAnchorNode => "$",
+        _ => "?"
+    };
+
+    private string FormatCharClass(RegexParser.CharClassNode cc)
+    {
+        var prefix = cc.Negated ? "[^" : "[";
+        var items = string.Join("", cc.Items);
+        return $"{prefix}{items}]";
+    }
+
+    private string GetNodeColor(string type) => type switch
+    {
+        "LiteralNode" => "#28a745",
+        "AnyCharNode" => "#17a2b8",
+        "CharClassNode" => "#ffc107",
+        "SpecialClassNode" => "#007bff",
+        "SequenceNode" => "#6c757d",
+        "AlternationNode" => "#dc3545",
+        "RepeatNode" => "#17a2b8",
+        "GroupNode" => "#6f42c1",
+        _ => "#343a40"
+    };
+
+    private string TruncateLabel(string label) => label.Length > 14 ? label.Substring(0, 12) + ".." : label;
+}

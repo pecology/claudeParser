@@ -1,0 +1,249 @@
+@page "/json"
+@using ClaudeParser.Examples
+@using ClaudeParser.Core
+@using System.Text.Json
+
+<PageTitle>JSON Parser - ClaudeParser</PageTitle>
+
+<h1>📝 JSON Parser</h1>
+
+<p>RFC 8259準拠のJSONをパースします。ネストされたオブジェクト・配列・エスケープシーケンスに対応しています。</p>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="jsonInput" class="form-label">JSON入力</label>
+            <textarea class="form-control font-monospace" id="jsonInput" rows="12" 
+                      @bind="jsonInput" @bind:event="oninput" @bind:after="ParseJson"
+                      placeholder='{"name": "Alice", "age": 30}'></textarea>
+        </div>
+        <button class="btn btn-secondary me-2" @onclick="Format">フォーマット</button>
+        <button class="btn btn-secondary" @onclick="Clear">クリア</button>
+    </div>
+    <div class="col-md-6">
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                <h5>パースエラー</h5>
+                <pre style="white-space: pre-wrap; margin: 0; font-size: 0.85em;">@errorMessage</pre>
+            </div>
+        }
+        @if (parsedJson != null)
+        {
+            <div class="mb-3">
+                <label class="form-label">パース結果（Pretty Print）</label>
+                <pre class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow: auto;">@prettyOutput</pre>
+            </div>
+        }
+    </div>
+</div>
+
+@if (parsedJson != null)
+{
+    <div class="mt-4">
+        <h3>AST ツリービュー</h3>
+        <div class="border rounded p-3 bg-light" style="max-height: 500px; overflow: auto;">
+            @RenderJsonValue(parsedJson, 0)
+        </div>
+    </div>
+}
+
+<div class="mt-4">
+    <h3>サンプルJSON</h3>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        @foreach (var (name, _) in samples)
+        {
+            <button class="btn btn-outline-primary btn-sm" @onclick="() => SetSample(name)">@name</button>
+        }
+    </div>
+</div>
+
+<div class="mt-4">
+    <h3>JSON型</h3>
+    <div class="row">
+        <div class="col-md-6">
+            <table class="table table-sm">
+                <thead><tr><th>型</th><th>例</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="badge bg-secondary">null</span></td><td><code>null</code></td></tr>
+                    <tr><td><span class="badge bg-info">boolean</span></td><td><code>true</code>, <code>false</code></td></tr>
+                    <tr><td><span class="badge bg-primary">number</span></td><td><code>42</code>, <code>-3.14</code>, <code>1e10</code></td></tr>
+                    <tr><td><span class="badge bg-success">string</span></td><td><code>"hello"</code></td></tr>
+                    <tr><td><span class="badge bg-warning text-dark">array</span></td><td><code>[1, 2, 3]</code></td></tr>
+                    <tr><td><span class="badge bg-danger">object</span></td><td><code>{"key": "value"}</code></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string jsonInput = "";
+    private string errorMessage = "";
+    private string prettyOutput = "";
+    private JsonParser.JsonValue? parsedJson;
+
+    private readonly (string name, string data)[] samples = new[]
+    {
+        ("シンプル", "{\"name\": \"Alice\", \"age\": 30}"),
+        ("配列", "[1, 2, 3, \"four\", true, null]"),
+        ("ネスト", "{\n  \"person\": {\n    \"name\": \"Bob\",\n    \"hobbies\": [\"reading\", \"gaming\"]\n  },\n  \"active\": true\n}"),
+        ("エスケープ", "{\"message\": \"Hello\\nWorld\\t!\", \"path\": \"C:\\\\Users\"}"),
+        ("Unicode", "{\"greeting\": \"\\u3053\\u3093\\u306b\\u3061\\u306f\"}"),
+        ("数値", "{\"int\": 42, \"float\": 3.14159, \"exp\": 1.5e-10, \"neg\": -999}"),
+    };
+
+    private void ParseJson()
+    {
+        errorMessage = "";
+        parsedJson = null;
+        prettyOutput = "";
+
+        if (string.IsNullOrWhiteSpace(jsonInput))
+        {
+            return;  // 空の場合はエラー表示しない
+        }
+
+        try
+        {
+            parsedJson = JsonParser.Parse(jsonInput);
+            prettyOutput = parsedJson.ToPrettyString();
+        }
+        catch (ParseException ex)
+        {
+            errorMessage = ex.Error.ToDetailedString(jsonInput);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void Format()
+    {
+        if (parsedJson != null)
+        {
+            jsonInput = parsedJson.ToPrettyString();
+        }
+        else
+        {
+            ParseJson();
+            if (parsedJson != null)
+            {
+                jsonInput = parsedJson.ToPrettyString();
+            }
+        }
+    }
+
+    private void Clear()
+    {
+        jsonInput = "";
+        errorMessage = "";
+        parsedJson = null;
+        prettyOutput = "";
+    }
+
+    private void SetSample(string name)
+    {
+        var sample = samples.FirstOrDefault(s => s.name == name);
+        if (sample != default)
+        {
+            jsonInput = sample.data;
+            ParseJson();
+        }
+    }
+
+    private RenderFragment RenderJsonValue(JsonParser.JsonValue value, int depth) => builder =>
+    {
+        var indent = new string(' ', depth * 2);
+        
+        switch (value)
+        {
+            case JsonParser.JsonNull:
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", "badge bg-secondary");
+                builder.AddContent(2, "null");
+                builder.CloseElement();
+                break;
+
+            case JsonParser.JsonBool b:
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", "badge bg-info");
+                builder.AddContent(2, b.Value ? "true" : "false");
+                builder.CloseElement();
+                break;
+
+            case JsonParser.JsonNumber n:
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", "badge bg-primary");
+                builder.AddContent(2, n.Value.ToString());
+                builder.CloseElement();
+                break;
+
+            case JsonParser.JsonString s:
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", "badge bg-success");
+                builder.AddContent(2, $"\"{EscapeForDisplay(s.Value)}\"");
+                builder.CloseElement();
+                break;
+
+            case JsonParser.JsonArray arr:
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                builder.OpenElement(4, "span");
+                builder.AddAttribute(5, "class", "badge bg-warning text-dark me-1");
+                builder.AddContent(6, "Array");
+                builder.CloseElement();
+                builder.AddContent(7, $"({arr.Elements.Count} items)");
+                builder.CloseElement();
+                builder.OpenElement(8, "ul");
+                builder.AddAttribute(9, "class", "list-unstyled ms-4");
+                for (int i = 0; i < arr.Elements.Count; i++)
+                {
+                    builder.OpenElement(10, "li");
+                    builder.AddContent(11, $"[{i}]: ");
+                    builder.AddContent(12, RenderJsonValue(arr.Elements[i], depth + 1));
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+
+            case JsonParser.JsonObject obj:
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                builder.OpenElement(4, "span");
+                builder.AddAttribute(5, "class", "badge bg-danger me-1");
+                builder.AddContent(6, "Object");
+                builder.CloseElement();
+                builder.AddContent(7, $"({obj.Properties.Count} properties)");
+                builder.CloseElement();
+                builder.OpenElement(8, "ul");
+                builder.AddAttribute(9, "class", "list-unstyled ms-4");
+                foreach (var kvp in obj.Properties)
+                {
+                    builder.OpenElement(10, "li");
+                    builder.OpenElement(11, "strong");
+                    builder.AddContent(12, $"\"{kvp.Key}\"");
+                    builder.CloseElement();
+                    builder.AddContent(13, ": ");
+                    builder.AddContent(14, RenderJsonValue(kvp.Value, depth + 1));
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+        }
+    };
+
+    private string EscapeForDisplay(string s)
+    {
+        if (s.Length > 50)
+            return s.Substring(0, 47) + "...";
+        return s.Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
+    }
+}

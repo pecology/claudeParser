@@ -10,6 +10,45 @@ namespace ClaudeParser.Examples;
 /// </summary>
 public static class SqlParser
 {
+    #region フォーマットオプション
+
+    /// <summary>
+    /// カンマの位置
+    /// </summary>
+    public enum CommaPosition
+    {
+        /// <summary>行末にカンマ</summary>
+        After,
+        /// <summary>行頭にカンマ</summary>
+        Before
+    }
+
+    /// <summary>
+    /// SQLフォーマットオプション
+    /// </summary>
+    public record SqlFormatOptions
+    {
+        /// <summary>インデントサイズ（スペース数）</summary>
+        public int IndentSize { get; init; } = 2;
+
+        /// <summary>カンマの位置</summary>
+        public CommaPosition CommaPosition { get; init; } = CommaPosition.After;
+
+        /// <summary>JOINのON条件を別行にするか</summary>
+        public bool JoinConditionOnNewLine { get; init; } = true;
+
+        /// <summary>キーワードを大文字にするか</summary>
+        public bool UppercaseKeywords { get; init; } = true;
+
+        /// <summary>デフォルトオプション</summary>
+        public static SqlFormatOptions Default { get; } = new();
+
+        /// <summary>指定レベルのインデント文字列を取得</summary>
+        public string Indent(int level) => new string(' ', level * IndentSize);
+    }
+
+    #endregion
+
     #region AST定義
 
     /// <summary>
@@ -18,6 +57,7 @@ public static class SqlParser
     public abstract record SqlNode
     {
         public abstract string ToSql(int indent = 0);
+        public abstract string ToSql(SqlFormatOptions options, int indent = 0);
     }
 
     /// <summary>
@@ -35,53 +75,81 @@ public static class SqlParser
         int? Offset
     ) : SqlNode
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var sb = new StringBuilder();
-            var ind = new string(' ', indent);
+            var ind = options.Indent(indent);
+            var colInd = options.Indent(indent + 1);
             
             sb.Append(ind);
             sb.Append("SELECT");
             if (Distinct) sb.Append(" DISTINCT");
             sb.AppendLine();
             
-            sb.Append(ind);
-            sb.Append("  ");
-            sb.AppendLine(string.Join(",\n" + ind + "  ", Columns.Select(c => c.ToSql())));
+            // カラムの出力
+            for (int i = 0; i < Columns.Count; i++)
+            {
+                var col = Columns[i];
+                var isLast = i == Columns.Count - 1;
+                
+                if (options.CommaPosition == CommaPosition.After)
+                {
+                    sb.Append(colInd);
+                    sb.Append(col.ToSql(options));
+                    if (!isLast) sb.Append(",");
+                    sb.AppendLine();
+                }
+                else
+                {
+                    if (i == 0)
+                    {
+                        sb.Append(colInd);
+                        sb.AppendLine(col.ToSql(options));
+                    }
+                    else
+                    {
+                        sb.Append(ind);
+                        sb.Append(", ");
+                        sb.AppendLine(col.ToSql(options));
+                    }
+                }
+            }
             
             if (From != null)
             {
                 sb.Append(ind);
                 sb.Append("FROM ");
-                sb.AppendLine(From.ToSql(indent));
+                sb.AppendLine(From.ToSql(options, indent));
             }
             
             if (Where != null)
             {
                 sb.Append(ind);
                 sb.Append("WHERE ");
-                sb.AppendLine(Where.ToSql());
+                sb.AppendLine(Where.ToSql(options));
             }
             
             if (GroupBy != null && GroupBy.Count > 0)
             {
                 sb.Append(ind);
                 sb.Append("GROUP BY ");
-                sb.AppendLine(string.Join(", ", GroupBy.Select(g => g.ToSql())));
+                sb.AppendLine(string.Join(", ", GroupBy.Select(g => g.ToSql(options))));
             }
             
             if (Having != null)
             {
                 sb.Append(ind);
                 sb.Append("HAVING ");
-                sb.AppendLine(Having.ToSql());
+                sb.AppendLine(Having.ToSql(options));
             }
             
             if (OrderBy != null && OrderBy.Count > 0)
             {
                 sb.Append(ind);
                 sb.Append("ORDER BY ");
-                sb.AppendLine(string.Join(", ", OrderBy.Select(o => o.ToSql())));
+                sb.AppendLine(string.Join(", ", OrderBy.Select(o => o.ToSql(options))));
             }
             
             if (Limit.HasValue)
@@ -105,8 +173,9 @@ public static class SqlParser
     /// </summary>
     public record SelectItem(Expression Expr, string? Alias) : SqlNode
     {
-        public override string ToSql(int indent = 0) =>
-            Alias != null ? $"{Expr.ToSql()} AS {Alias}" : Expr.ToSql();
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) =>
+            Alias != null ? $"{Expr.ToSql(options)} AS {Alias}" : Expr.ToSql(options);
     }
 
     /// <summary>
@@ -114,8 +183,9 @@ public static class SqlParser
     /// </summary>
     public record OrderByItem(Expression Expr, bool Descending) : SqlNode
     {
-        public override string ToSql(int indent = 0) =>
-            Descending ? $"{Expr.ToSql()} DESC" : Expr.ToSql();
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) =>
+            Descending ? $"{Expr.ToSql(options)} DESC" : Expr.ToSql(options);
     }
 
     /// <summary>
@@ -123,7 +193,8 @@ public static class SqlParser
     /// </summary>
     public record FromClause(TableReference Table) : SqlNode
     {
-        public override string ToSql(int indent = 0) => Table.ToSql(indent);
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) => Table.ToSql(options, indent);
     }
 
     /// <summary>
@@ -136,7 +207,8 @@ public static class SqlParser
     /// </summary>
     public record TableName(string Schema, string Name, string? Alias) : TableReference
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var name = string.IsNullOrEmpty(Schema) ? Name : $"{Schema}.{Name}";
             return Alias != null ? $"{name} AS {Alias}" : name;
@@ -148,8 +220,13 @@ public static class SqlParser
     /// </summary>
     public record SubqueryTable(SelectStatement Query, string Alias) : TableReference
     {
-        public override string ToSql(int indent = 0) =>
-            $"(\n{Query.ToSql(indent + 2)}\n{new string(' ', indent)}) AS {Alias}";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
+        {
+            var innerInd = options.Indent(indent + 1);
+            var outerInd = options.Indent(indent);
+            return $"(\n{Query.ToSql(options, indent + 1)}\n{outerInd}) AS {Alias}";
+        }
     }
 
     /// <summary>
@@ -157,8 +234,10 @@ public static class SqlParser
     /// </summary>
     public record JoinedTable(TableReference Left, JoinType Type, TableReference Right, Expression? On) : TableReference
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
+            var ind = options.Indent(indent);
             var joinStr = Type switch
             {
                 JoinType.Inner => "INNER JOIN",
@@ -168,10 +247,18 @@ public static class SqlParser
                 JoinType.Cross => "CROSS JOIN",
                 _ => "JOIN"
             };
-            var result = $"{Left.ToSql(indent)}\n{new string(' ', indent)}{joinStr} {Right.ToSql(indent)}";
+            var result = $"{Left.ToSql(options, indent)}\n{ind}{joinStr} {Right.ToSql(options, indent)}";
             if (On != null)
             {
-                result += $" ON {On.ToSql()}";
+                if (options.JoinConditionOnNewLine)
+                {
+                    var onInd = options.Indent(indent + 1);
+                    result += $"\n{onInd}ON {On.ToSql(options)}";
+                }
+                else
+                {
+                    result += $" ON {On.ToSql(options)}";
+                }
             }
             return result;
         }
@@ -196,7 +283,8 @@ public static class SqlParser
     /// </summary>
     public record Wildcard(string? TableName) : Expression
     {
-        public override string ToSql(int indent = 0) =>
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) =>
             TableName != null ? $"{TableName}.*" : "*";
     }
 
@@ -205,7 +293,8 @@ public static class SqlParser
     /// </summary>
     public record ColumnRef(string? TableName, string ColumnName) : Expression
     {
-        public override string ToSql(int indent = 0) =>
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) =>
             TableName != null ? $"{TableName}.{ColumnName}" : ColumnName;
     }
 
@@ -216,27 +305,32 @@ public static class SqlParser
 
     public record IntLiteral(long Value) : Literal
     {
-        public override string ToSql(int indent = 0) => Value.ToString();
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) => Value.ToString();
     }
 
     public record DoubleLiteral(double Value) : Literal
     {
-        public override string ToSql(int indent = 0) => Value.ToString();
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) => Value.ToString();
     }
 
     public record StringLiteral(string Value) : Literal
     {
-        public override string ToSql(int indent = 0) => $"'{Value.Replace("'", "''")}'";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) => $"'{Value.Replace("'", "''")}'";
     }
 
     public record NullLiteral() : Literal
     {
-        public override string ToSql(int indent = 0) => "NULL";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) => "NULL";
     }
 
     public record BoolLiteral(bool Value) : Literal
     {
-        public override string ToSql(int indent = 0) => Value ? "TRUE" : "FALSE";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) => Value ? "TRUE" : "FALSE";
     }
 
     /// <summary>
@@ -244,8 +338,9 @@ public static class SqlParser
     /// </summary>
     public record BinaryOp(Expression Left, string Operator, Expression Right) : Expression
     {
-        public override string ToSql(int indent = 0) =>
-            $"({Left.ToSql()} {Operator} {Right.ToSql()})";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) =>
+            $"({Left.ToSql(options)} {Operator} {Right.ToSql(options)})";
     }
 
     /// <summary>
@@ -253,8 +348,9 @@ public static class SqlParser
     /// </summary>
     public record UnaryOp(string Operator, Expression Operand) : Expression
     {
-        public override string ToSql(int indent = 0) =>
-            Operator.ToUpper() == "NOT" ? $"NOT {Operand.ToSql()}" : $"{Operator}{Operand.ToSql()}";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) =>
+            Operator.ToUpper() == "NOT" ? $"NOT {Operand.ToSql(options)}" : $"{Operator}{Operand.ToSql(options)}";
     }
 
     /// <summary>
@@ -262,10 +358,11 @@ public static class SqlParser
     /// </summary>
     public record FunctionCall(string Name, IReadOnlyList<Expression> Args, bool Distinct) : Expression
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var distinct = Distinct ? "DISTINCT " : "";
-            return $"{Name.ToUpper()}({distinct}{string.Join(", ", Args.Select(a => a.ToSql()))})";
+            return $"{Name.ToUpper()}({distinct}{string.Join(", ", Args.Select(a => a.ToSql(options)))})";
         }
     }
 
@@ -278,20 +375,21 @@ public static class SqlParser
         Expression? Else
     ) : Expression
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var sb = new StringBuilder("CASE");
             if (Operand != null)
             {
-                sb.Append($" {Operand.ToSql()}");
+                sb.Append($" {Operand.ToSql(options)}");
             }
             foreach (var (when, then) in WhenClauses)
             {
-                sb.Append($" WHEN {when.ToSql()} THEN {then.ToSql()}");
+                sb.Append($" WHEN {when.ToSql(options)} THEN {then.ToSql(options)}");
             }
             if (Else != null)
             {
-                sb.Append($" ELSE {Else.ToSql()}");
+                sb.Append($" ELSE {Else.ToSql(options)}");
             }
             sb.Append(" END");
             return sb.ToString();
@@ -303,14 +401,16 @@ public static class SqlParser
     /// </summary>
     public record InExpression(Expression Operand, IReadOnlyList<Expression>? Values, SelectStatement? Subquery, bool Not) : Expression
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var notStr = Not ? "NOT " : "";
             if (Values != null)
             {
-                return $"{Operand.ToSql()} {notStr}IN ({string.Join(", ", Values.Select(v => v.ToSql()))})";
+                return $"{Operand.ToSql(options)} {notStr}IN ({string.Join(", ", Values.Select(v => v.ToSql(options)))})";
             }
-            return $"{Operand.ToSql()} {notStr}IN (\n{Subquery!.ToSql(indent + 2)}\n{new string(' ', indent)})";
+            var ind = options.Indent(indent);
+            return $"{Operand.ToSql(options)} {notStr}IN (\n{Subquery!.ToSql(options, indent + 1)}\n{ind})";
         }
     }
 
@@ -319,10 +419,11 @@ public static class SqlParser
     /// </summary>
     public record BetweenExpression(Expression Operand, Expression Low, Expression High, bool Not) : Expression
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var notStr = Not ? "NOT " : "";
-            return $"{Operand.ToSql()} {notStr}BETWEEN {Low.ToSql()} AND {High.ToSql()}";
+            return $"{Operand.ToSql(options)} {notStr}BETWEEN {Low.ToSql(options)} AND {High.ToSql(options)}";
         }
     }
 
@@ -331,10 +432,12 @@ public static class SqlParser
     /// </summary>
     public record ExistsExpression(SelectStatement Subquery, bool Not) : Expression
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var notStr = Not ? "NOT " : "";
-            return $"{notStr}EXISTS (\n{Subquery.ToSql(indent + 2)}\n{new string(' ', indent)})";
+            var ind = options.Indent(indent);
+            return $"{notStr}EXISTS (\n{Subquery.ToSql(options, indent + 1)}\n{ind})";
         }
     }
 
@@ -343,8 +446,12 @@ public static class SqlParser
     /// </summary>
     public record ScalarSubquery(SelectStatement Query) : Expression
     {
-        public override string ToSql(int indent = 0) =>
-            $"(\n{Query.ToSql(indent + 2)}\n{new string(' ', indent)})";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
+        {
+            var ind = options.Indent(indent);
+            return $"(\n{Query.ToSql(options, indent + 1)}\n{ind})";
+        }
     }
 
     /// <summary>
@@ -352,8 +459,9 @@ public static class SqlParser
     /// </summary>
     public record IsNullExpression(Expression Operand, bool Not) : Expression
     {
-        public override string ToSql(int indent = 0) =>
-            Not ? $"{Operand.ToSql()} IS NOT NULL" : $"{Operand.ToSql()} IS NULL";
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0) =>
+            Not ? $"{Operand.ToSql(options)} IS NOT NULL" : $"{Operand.ToSql(options)} IS NULL";
     }
 
     /// <summary>
@@ -361,10 +469,11 @@ public static class SqlParser
     /// </summary>
     public record LikeExpression(Expression Operand, Expression Pattern, bool Not) : Expression
     {
-        public override string ToSql(int indent = 0)
+        public override string ToSql(int indent = 0) => ToSql(SqlFormatOptions.Default, indent);
+        public override string ToSql(SqlFormatOptions options, int indent = 0)
         {
             var notStr = Not ? "NOT " : "";
-            return $"{Operand.ToSql()} {notStr}LIKE {Pattern.ToSql()}";
+            return $"{Operand.ToSql(options)} {notStr}LIKE {Pattern.ToSql(options)}";
         }
     }
 

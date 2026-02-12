@@ -1,0 +1,446 @@
+@page "/sql"
+@using ClaudeParser.Examples
+@using ClaudeParser.Core
+
+<PageTitle>SQL Parser - ClaudeParser</PageTitle>
+
+<h1>🗃️ SQL Parser</h1>
+
+<p>SELECT文のパーサーです。サブクエリ、スカラサブクエリ、JOIN（INNER/LEFT/RIGHT/FULL/CROSS）に対応しています。</p>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="sqlInput" class="form-label">SQL入力</label>
+            <textarea class="form-control font-monospace" id="sqlInput" rows="8" 
+                      @bind="sqlInput" @bind:event="oninput" @bind:after="ParseSql"
+                      placeholder="SELECT * FROM users WHERE age > 18"></textarea>
+        </div>
+        <button class="btn btn-secondary me-2" @onclick="FormatSql">フォーマット</button>
+        <button class="btn btn-secondary" @onclick="Clear">クリア</button>
+    </div>
+    <div class="col-md-6">
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                <h5>パースエラー</h5>
+                <pre style="white-space: pre-wrap; margin: 0; font-size: 0.85em;">@errorMessage</pre>
+            </div>
+        }
+        @if (parsedSql != null)
+        {
+            <div class="mb-3">
+                <label class="form-label">再生成SQL</label>
+                <pre class="bg-dark text-light p-3 rounded" style="max-height: 200px; overflow: auto;">@regeneratedSql</pre>
+            </div>
+        }
+    </div>
+</div>
+
+@if (parsedSql != null)
+{
+    <div class="mt-4">
+        <h3>AST ツリービュー</h3>
+        <div class="border rounded p-3 bg-light" style="max-height: 500px; overflow: auto;">
+            @RenderSelectStatement(parsedSql)
+        </div>
+    </div>
+}
+
+<div class="mt-4">
+    <h3>サンプルSQL</h3>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        @foreach (var (name, _) in samples)
+        {
+            <button class="btn btn-outline-primary btn-sm" @onclick="() => SetSample(name)">@name</button>
+        }
+    </div>
+</div>
+
+<div class="mt-4">
+    <h3>対応構文</h3>
+    <div class="row">
+        <div class="col-md-6">
+            <table class="table table-sm">
+                <thead><tr><th>機能</th><th>例</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="badge bg-primary">SELECT</span></td><td><code>SELECT a, b, c</code></td></tr>
+                    <tr><td><span class="badge bg-primary">DISTINCT</span></td><td><code>SELECT DISTINCT name</code></td></tr>
+                    <tr><td><span class="badge bg-info">FROM</span></td><td><code>FROM users u</code></td></tr>
+                    <tr><td><span class="badge bg-success">WHERE</span></td><td><code>WHERE age > 18</code></td></tr>
+                    <tr><td><span class="badge bg-warning text-dark">JOIN</span></td><td><code>JOIN orders ON ...</code></td></tr>
+                    <tr><td><span class="badge bg-danger">サブクエリ</span></td><td><code>(SELECT ...) AS sub</code></td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="col-md-6">
+            <table class="table table-sm">
+                <thead><tr><th>機能</th><th>例</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="badge bg-secondary">GROUP BY</span></td><td><code>GROUP BY category</code></td></tr>
+                    <tr><td><span class="badge bg-secondary">HAVING</span></td><td><code>HAVING COUNT(*) > 1</code></td></tr>
+                    <tr><td><span class="badge bg-secondary">ORDER BY</span></td><td><code>ORDER BY name ASC</code></td></tr>
+                    <tr><td><span class="badge bg-secondary">LIMIT/OFFSET</span></td><td><code>LIMIT 10 OFFSET 5</code></td></tr>
+                    <tr><td><span class="badge bg-dark">CASE</span></td><td><code>CASE WHEN ... END</code></td></tr>
+                    <tr><td><span class="badge bg-dark">IN/BETWEEN</span></td><td><code>x IN (1,2,3)</code></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string sqlInput = "";
+    private string errorMessage = "";
+    private string regeneratedSql = "";
+    private SqlParser.SelectStatement? parsedSql;
+
+    private readonly (string name, string data)[] samples = new[]
+    {
+        ("シンプル", "SELECT * FROM users"),
+        ("WHERE条件", "SELECT id, name, age FROM users WHERE age >= 18 AND status = 'active'"),
+        ("JOIN", "SELECT u.name, o.total FROM users u INNER JOIN orders o ON u.id = o.user_id"),
+        ("LEFT JOIN", "SELECT u.name, o.total FROM users u LEFT JOIN orders o ON u.id = o.user_id WHERE o.id IS NULL"),
+        ("サブクエリ", "SELECT * FROM (SELECT id, name FROM users WHERE active = true) AS active_users"),
+        ("スカラサブクエリ", "SELECT name, (SELECT COUNT(*) FROM orders WHERE orders.user_id = users.id) AS order_count FROM users"),
+        ("GROUP BY", "SELECT category, COUNT(*) AS cnt, SUM(price) AS total FROM products GROUP BY category HAVING COUNT(*) > 5"),
+        ("ORDER BY", "SELECT name, created_at FROM posts ORDER BY created_at DESC, name ASC LIMIT 10 OFFSET 20"),
+        ("CASE式", "SELECT name, CASE WHEN age < 20 THEN 'young' WHEN age < 60 THEN 'adult' ELSE 'senior' END AS age_group FROM users"),
+        ("複合条件", "SELECT * FROM items WHERE price BETWEEN 100 AND 500 AND category IN ('A', 'B', 'C') AND name LIKE '%test%'"),
+        ("関数", "SELECT UPPER(name), COALESCE(nickname, name), LENGTH(description) FROM users"),
+        ("複雑なJOIN", "SELECT u.name, o.total, p.name AS product FROM users u INNER JOIN orders o ON u.id = o.user_id LEFT JOIN products p ON o.product_id = p.id WHERE o.total > 1000"),
+    };
+
+    private void ParseSql()
+    {
+        errorMessage = "";
+        parsedSql = null;
+        regeneratedSql = "";
+
+        if (string.IsNullOrWhiteSpace(sqlInput))
+        {
+            return;
+        }
+
+        try
+        {
+            parsedSql = SqlParser.Parse(sqlInput);
+            regeneratedSql = parsedSql.ToSql();
+        }
+        catch (ParseException ex)
+        {
+            errorMessage = ex.Error.ToDetailedString(sqlInput);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void FormatSql()
+    {
+        if (parsedSql != null)
+        {
+            sqlInput = parsedSql.ToSql();
+        }
+        else
+        {
+            ParseSql();
+            if (parsedSql != null)
+            {
+                sqlInput = parsedSql.ToSql();
+            }
+        }
+    }
+
+    private void Clear()
+    {
+        sqlInput = "";
+        errorMessage = "";
+        parsedSql = null;
+        regeneratedSql = "";
+    }
+
+    private void SetSample(string name)
+    {
+        var sample = samples.FirstOrDefault(s => s.name == name);
+        if (sample != default)
+        {
+            sqlInput = sample.data;
+            ParseSql();
+        }
+    }
+
+    private RenderFragment RenderSelectStatement(SqlParser.SelectStatement stmt) => builder =>
+    {
+        builder.OpenElement(0, "details");
+        builder.AddAttribute(1, "open", true);
+        builder.OpenElement(2, "summary");
+        builder.AddAttribute(3, "style", "cursor: pointer;");
+        builder.OpenElement(4, "span");
+        builder.AddAttribute(5, "class", "badge bg-primary me-1");
+        builder.AddContent(6, "SELECT");
+        builder.CloseElement();
+        if (stmt.Distinct)
+        {
+            builder.OpenElement(7, "span");
+            builder.AddAttribute(8, "class", "badge bg-info me-1");
+            builder.AddContent(9, "DISTINCT");
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+
+        builder.OpenElement(10, "ul");
+        builder.AddAttribute(11, "class", "list-unstyled ms-4");
+
+        // Columns
+        builder.OpenElement(12, "li");
+        builder.AddContent(13, RenderSelectItems(stmt.Columns));
+        builder.CloseElement();
+
+        // From
+        if (stmt.From != null)
+        {
+            builder.OpenElement(14, "li");
+            builder.AddContent(15, RenderFromClause(stmt.From));
+            builder.CloseElement();
+        }
+
+        // Where
+        if (stmt.Where != null)
+        {
+            builder.OpenElement(16, "li");
+            builder.AddContent(17, RenderWhereClause(stmt.Where));
+            builder.CloseElement();
+        }
+
+        // GroupBy
+        if (stmt.GroupBy != null && stmt.GroupBy.Count > 0)
+        {
+            builder.OpenElement(18, "li");
+            builder.OpenElement(19, "span");
+            builder.AddAttribute(20, "class", "badge bg-secondary me-1");
+            builder.AddContent(21, "GROUP BY");
+            builder.CloseElement();
+            builder.AddContent(22, string.Join(", ", stmt.GroupBy.Select(e => TruncateExpression(e.ToSql()))));
+            builder.CloseElement();
+        }
+
+        // Having
+        if (stmt.Having != null)
+        {
+            builder.OpenElement(23, "li");
+            builder.OpenElement(24, "span");
+            builder.AddAttribute(25, "class", "badge bg-secondary me-1");
+            builder.AddContent(26, "HAVING");
+            builder.CloseElement();
+            builder.AddContent(27, TruncateExpression(stmt.Having.ToSql()));
+            builder.CloseElement();
+        }
+
+        // OrderBy
+        if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
+        {
+            builder.OpenElement(28, "li");
+            builder.OpenElement(29, "span");
+            builder.AddAttribute(30, "class", "badge bg-secondary me-1");
+            builder.AddContent(31, "ORDER BY");
+            builder.CloseElement();
+            builder.AddContent(32, string.Join(", ", stmt.OrderBy.Select(o => $"{TruncateExpression(o.Expr.ToSql())} {(o.Descending ? "DESC" : "ASC")}")));
+            builder.CloseElement();
+        }
+
+        // Limit/Offset
+        if (stmt.Limit.HasValue)
+        {
+            builder.OpenElement(33, "li");
+            builder.OpenElement(34, "span");
+            builder.AddAttribute(35, "class", "badge bg-secondary me-1");
+            builder.AddContent(36, "LIMIT");
+            builder.CloseElement();
+            builder.AddContent(37, stmt.Limit.Value.ToString());
+            builder.CloseElement();
+        }
+        if (stmt.Offset.HasValue)
+        {
+            builder.OpenElement(38, "li");
+            builder.OpenElement(39, "span");
+            builder.AddAttribute(40, "class", "badge bg-secondary me-1");
+            builder.AddContent(41, "OFFSET");
+            builder.CloseElement();
+            builder.AddContent(42, stmt.Offset.Value.ToString());
+            builder.CloseElement();
+        }
+
+        builder.CloseElement(); // ul
+        builder.CloseElement(); // details
+    };
+
+    private RenderFragment RenderSelectItems(IReadOnlyList<SqlParser.SelectItem> items) => builder =>
+    {
+        builder.OpenElement(0, "details");
+        builder.AddAttribute(1, "open", true);
+        builder.OpenElement(2, "summary");
+        builder.AddAttribute(3, "style", "cursor: pointer;");
+        builder.OpenElement(4, "span");
+        builder.AddAttribute(5, "class", "badge bg-success me-1");
+        builder.AddContent(6, "Columns");
+        builder.CloseElement();
+        builder.AddContent(7, $"({items.Count} items)");
+        builder.CloseElement();
+
+        builder.OpenElement(8, "ul");
+        builder.AddAttribute(9, "class", "list-unstyled ms-4");
+        foreach (var item in items)
+        {
+            builder.OpenElement(10, "li");
+            builder.AddContent(11, RenderSelectItem(item));
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment RenderSelectItem(SqlParser.SelectItem item) => builder =>
+    {
+        var exprText = TruncateExpression(item.Expr.ToSql());
+        if (item.Alias != null)
+        {
+            builder.AddContent(0, $"{exprText} ");
+            builder.OpenElement(1, "span");
+            builder.AddAttribute(2, "class", "badge bg-info");
+            builder.AddContent(3, $"AS {item.Alias}");
+            builder.CloseElement();
+        }
+        else
+        {
+            builder.AddContent(0, exprText);
+        }
+    };
+
+    private RenderFragment RenderFromClause(SqlParser.FromClause from) => builder =>
+    {
+        builder.OpenElement(0, "details");
+        builder.AddAttribute(1, "open", true);
+        builder.OpenElement(2, "summary");
+        builder.AddAttribute(3, "style", "cursor: pointer;");
+        builder.OpenElement(4, "span");
+        builder.AddAttribute(5, "class", "badge bg-warning text-dark me-1");
+        builder.AddContent(6, "FROM");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(7, "ul");
+        builder.AddAttribute(8, "class", "list-unstyled ms-4");
+        builder.OpenElement(9, "li");
+        builder.AddContent(10, RenderTableReference(from.Table));
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment RenderTableReference(SqlParser.TableReference table) => builder =>
+    {
+        switch (table)
+        {
+            case SqlParser.TableName tn:
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", "font-monospace");
+                builder.AddContent(2, tn.Name);
+                if (tn.Alias != null)
+                {
+                    builder.AddContent(3, " ");
+                    builder.OpenElement(4, "span");
+                    builder.AddAttribute(5, "class", "badge bg-info");
+                    builder.AddContent(6, $"AS {tn.Alias}");
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                break;
+
+            case SqlParser.SubqueryTable sq:
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                builder.OpenElement(4, "span");
+                builder.AddAttribute(5, "class", "badge bg-danger me-1");
+                builder.AddContent(6, "Subquery");
+                builder.CloseElement();
+                if (sq.Alias != null)
+                {
+                    builder.OpenElement(7, "span");
+                    builder.AddAttribute(8, "class", "badge bg-info");
+                    builder.AddContent(9, $"AS {sq.Alias}");
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                builder.OpenElement(10, "div");
+                builder.AddAttribute(11, "class", "ms-4");
+                builder.AddContent(12, RenderSelectStatement(sq.Query));
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+
+            case SqlParser.JoinedTable jt:
+                builder.OpenElement(0, "details");
+                builder.AddAttribute(1, "open", true);
+                builder.OpenElement(2, "summary");
+                builder.AddAttribute(3, "style", "cursor: pointer;");
+                builder.OpenElement(4, "span");
+                builder.AddAttribute(5, "class", $"badge {GetJoinBadgeClass(jt.Type)} me-1");
+                builder.AddContent(6, jt.Type.ToString().ToUpper() + " JOIN");
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.OpenElement(7, "ul");
+                builder.AddAttribute(8, "class", "list-unstyled ms-4");
+                builder.OpenElement(9, "li");
+                builder.AddContent(10, "Left: ");
+                builder.AddContent(11, RenderTableReference(jt.Left));
+                builder.CloseElement();
+                builder.OpenElement(12, "li");
+                builder.AddContent(13, "Right: ");
+                builder.AddContent(14, RenderTableReference(jt.Right));
+                builder.CloseElement();
+                if (jt.On != null)
+                {
+                    builder.OpenElement(15, "li");
+                    builder.OpenElement(16, "span");
+                    builder.AddAttribute(17, "class", "badge bg-secondary me-1");
+                    builder.AddContent(18, "ON");
+                    builder.CloseElement();
+                    builder.AddContent(19, TruncateExpression(jt.On.ToSql()));
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+        }
+    };
+
+    private RenderFragment RenderWhereClause(SqlParser.Expression where) => builder =>
+    {
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", "badge bg-success me-1");
+        builder.AddContent(2, "WHERE");
+        builder.CloseElement();
+        builder.AddContent(3, TruncateExpression(where.ToSql()));
+    };
+
+    private string GetJoinBadgeClass(SqlParser.JoinType joinType) => joinType switch
+    {
+        SqlParser.JoinType.Inner => "bg-primary",
+        SqlParser.JoinType.Left => "bg-warning text-dark",
+        SqlParser.JoinType.Right => "bg-info",
+        SqlParser.JoinType.Full => "bg-danger",
+        SqlParser.JoinType.Cross => "bg-dark",
+        _ => "bg-secondary"
+    };
+
+    private string TruncateExpression(string expr)
+    {
+        if (expr.Length > 80)
+            return expr.Substring(0, 77) + "...";
+        return expr;
+    }
+}
